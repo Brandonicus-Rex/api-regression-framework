@@ -49,3 +49,14 @@ def test_load_scenario_validates(tmp_path):
     bad.write_text("steps:\n  - name: no method\n    path: /x\n")
     with pytest.raises(ScenarioError):
         load_scenario(bad)
+
+
+def test_load_scenario_validates_cleanup_steps(tmp_path):
+    # Cleanup steps are held to the same rules as test steps.
+    bad = tmp_path / "bad_cleanup.yaml"
+    bad.write_text(
+        "cleanup:\n  - name: no method\n    path: /x\n"
+        "steps:\n  - name: ok\n    method: GET\n    path: /x\n"
+    )
+    with pytest.raises(ScenarioError):
+        load_scenario(bad)
