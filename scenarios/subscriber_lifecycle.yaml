@@ -1,0 +1,95 @@
+# Happy-path regression: walk one subscriber through its full lifecycle.
+#
+# Each step sends one request and checks the response. The `save` block on
+# the first step captures the new subscriber's ID so later steps can use it
+# as ${subscriber_id}.
+
+name: Subscriber full lifecycle
+description: >
+  Creates a subscriber, suspends and restores service, updates features,
+  changes the phone number, then closes the account and confirms closed
+  accounts can't be modified.
+
+# Later steps depend on earlier ones (they need the subscriber ID),
+# so stop at the first failure instead of producing misleading errors.
+stop_on_failure: true
+
+# Fictional numbers from the 555-01xx range reserved for examples.
+variables:
+  phone: "5550100001"
+  new_phone: "5550100002"
+
+steps:
+  - name: Create subscriber
+    method: POST
+    path: /api/v1/subscribers
+    body:
+      first_name: Test
+      last_name: Lifecycle
+      phone_number: ${phone}
+      plan: unlimited-basic
+      features: [voicemail, sms]
+    expect:
+      status: 201
+      json:
+        status: active
+        phone_number: ${phone}
+    save:
+      subscriber_id: id          # used by every step below
+
+  - name: Read subscriber back
+    method: GET
+    path: /api/v1/subscribers/${subscriber_id}
+    expect:
+      status: 200
+      json:
+        plan: unlimited-basic
+
+  - name: Suspend service
+    method: PATCH
+    path: /api/v1/subscribers/${subscriber_id}/status
+    body: {status: suspended, reason: non-payment}
+    expect:
+      status: 200
+      json: {status: suspended}
+
+  - name: Restore service
+    method: PATCH
+    path: /api/v1/subscribers/${subscriber_id}/status
+    body: {status: active, reason: payment-received}
+    expect:
+      status: 200
+      json: {status: active}
+
+  - name: Add and remove features
+    method: PUT
+    path: /api/v1/subscribers/${subscriber_id}/features
+    body: {add: [mms, call-waiting], remove: [sms]}
+    expect:
+      status: 200
+      contains:
+        features: mms            # list must include "mms"
+
+  - name: Change phone number
+    method: PUT
+    path: /api/v1/subscribers/${subscriber_id}/phone-number
+    body: {phone_number: "${new_phone}"}
+    expect:
+      status: 200
+      json:
+        phone_number: ${new_phone}
+
+  - name: Close account
+    method: POST
+    path: /api/v1/subscribers/${subscriber_id}/close
+    expect:
+      status: 200
+      json: {status: closed}
+
+  # Negative check at the end: a closed account must refuse changes.
+  - name: Closed account rejects changes
+    method: PATCH
+    path: /api/v1/subscribers/${subscriber_id}/status
+    body: {status: active}
+    expect:
+      status: 409
