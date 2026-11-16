@@ -19,6 +19,25 @@ variables:
   phone: "5550100001"
   new_phone: "5550100002"
 
+# Runs first and last: deactivate whatever is open on the test numbers, so
+# every run starts from, and leaves behind, a known inactive state.
+cleanup:
+  - name: Deactivate ${phone}
+    method: POST
+    path: /api/v1/subscribers/deactivate
+    body: {phone_number: "${phone}"}
+    expect:
+      status: 200
+      json: {status: inactive}
+
+  - name: Deactivate ${new_phone}
+    method: POST
+    path: /api/v1/subscribers/deactivate
+    body: {phone_number: "${new_phone}"}
+    expect:
+      status: 200
+      json: {status: inactive}
+
 steps:
   - name: Create subscriber
     method: POST
