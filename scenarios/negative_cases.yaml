@@ -7,6 +7,20 @@ description: Confirms the API rejects bad input and unknown records.
 # These steps are independent, so run them all and report every failure.
 stop_on_failure: false
 
+variables:
+  duplicate_phone: "5550100020"
+
+# Runs first and last: deactivate whatever is open on the test number, so
+# every run starts from, and leaves behind, a known inactive state.
+cleanup:
+  - name: Deactivate ${duplicate_phone}
+    method: POST
+    path: /api/v1/subscribers/deactivate
+    body: {phone_number: "${duplicate_phone}"}
+    expect:
+      status: 200
+      json: {status: inactive}
+
 steps:
   # 422 = request body failed validation
   - name: Reject invalid phone number
@@ -44,7 +58,7 @@ steps:
     body:
       first_name: First
       last_name: Owner
-      phone_number: "5550100020"
+      phone_number: ${duplicate_phone}
       plan: prepaid
     expect:
       status: 201
@@ -55,7 +69,7 @@ steps:
     body:
       first_name: Second
       last_name: Owner
-      phone_number: "5550100020"
+      phone_number: ${duplicate_phone}
       plan: prepaid
     expect:
       status: 409
