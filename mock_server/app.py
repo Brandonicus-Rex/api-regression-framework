@@ -12,6 +12,9 @@ Business rules it enforces (so tests have something meaningful to check):
 - phone numbers must be 10-15 digits
 - two active subscribers can't share a phone number
 - a closed subscriber can't be changed
+- deactivating by phone number is idempotent: it closes whatever is open on
+  that number and succeeds even when nothing is, so test runs can use it to
+  put their data into a known inactive state before and after each run
 """
 
 from __future__ import annotations
@@ -66,6 +69,12 @@ class FeatureUpdate(BaseModel):
 
 class NumberChange(BaseModel):
     """Body for changing a subscriber's phone number."""
+
+    phone_number: str = Field(pattern=r"^\+?\d{10,15}$")
+
+
+class Deactivate(BaseModel):
+    """Body for deactivating whatever account is open on a phone number."""
 
     phone_number: str = Field(pattern=r"^\+?\d{10,15}$")
 
@@ -145,6 +154,23 @@ def create_subscriber(body: SubscriberCreate) -> Subscriber:
     )
     _db[sub.id] = sub
     return sub
+
+
+@app.post("/api/v1/subscribers/deactivate", dependencies=[Depends(require_auth)])
+def deactivate_by_number(body: Deactivate) -> dict:
+    """Close every open (active or suspended) account on a phone number.
+
+    Idempotent: returns 200 whether or not anything was open, so regression
+    runs can call it first and last to leave the number in a known inactive
+    state. ``deactivated`` reports how many accounts this call closed.
+    """
+    closed = 0
+    for sub in _db.values():
+        if sub.phone_number == body.phone_number and sub.status != "closed":
+            sub.status = "closed"
+            sub.updated_at = _now()
+            closed += 1
+    return {"phone_number": body.phone_number, "status": "inactive", "deactivated": closed}
 
 
 @app.get("/api/v1/subscribers/{subscriber_id}", dependencies=[Depends(require_auth)])
