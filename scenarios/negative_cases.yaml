@@ -1,0 +1,61 @@
+# Negative regression: confirm the API rejects bad input with the right
+# error codes. A test suite that only checks happy paths misses half the bugs.
+
+name: Negative and validation cases
+description: Confirms the API rejects bad input and unknown records.
+
+# These steps are independent, so run them all and report every failure.
+stop_on_failure: false
+
+steps:
+  # 422 = request body failed validation
+  - name: Reject invalid phone number
+    method: POST
+    path: /api/v1/subscribers
+    body:
+      first_name: Bad
+      last_name: Number
+      phone_number: not-a-number
+      plan: unlimited-basic
+    expect:
+      status: 422
+
+  - name: Reject missing required field
+    method: POST
+    path: /api/v1/subscribers
+    body:
+      first_name: Missing          # last_name and plan are omitted on purpose
+      phone_number: "5550100010"
+    expect:
+      status: 422
+
+  # 404 = record doesn't exist
+  - name: Unknown subscriber returns 404
+    method: GET
+    path: /api/v1/subscribers/00000000-0000-0000-0000-000000000000
+    expect:
+      status: 404
+
+  # 409 = request conflicts with existing data. Create a record first,
+  # then try to create a second one with the same phone number.
+  - name: Create subscriber for duplicate check
+    method: POST
+    path: /api/v1/subscribers
+    body:
+      first_name: First
+      last_name: Owner
+      phone_number: "5550100020"
+      plan: prepaid
+    expect:
+      status: 201
+
+  - name: Reject duplicate active phone number
+    method: POST
+    path: /api/v1/subscribers
+    body:
+      first_name: Second
+      last_name: Owner
+      phone_number: "5550100020"
+      plan: prepaid
+    expect:
+      status: 409
