@@ -16,6 +16,7 @@ Telecom and account-provisioning systems need the same business flows tested ove
 
 - **YAML scenarios** with ordered steps, expected results and saved variables (`${subscriber_id}`)
 - **Real assertions** on status codes, JSON field values and list contents
+- **Cleanup first and last**: every scenario deactivates its test accounts before the first test step and again after the last, even when a step fails, so runs can be repeated back to back
 - **Config from environment variables** (`.env`), so no URLs or secrets live in code
 - **Resilient HTTP client** with timeouts and retries on transient errors
 - **pytest integration**: each scenario becomes a test case, with JUnit XML output for CI
@@ -67,11 +68,14 @@ Example output:
 
 ```
 [PASS] Subscriber full lifecycle
+   ok  Clean up (before): Deactivate 5550100001 (status 200, 2 ms)
+   ok  Clean up (before): Deactivate 5550100002 (status 200, 1 ms)
    ok  Create subscriber (status 201, 2 ms)
    ok  Suspend service (status 200, 2 ms)
-   ok  Restore service (status 200, 2 ms)
    ...
    ok  Closed account rejects changes (status 409, 2 ms)
+   ok  Clean up (after): Deactivate 5550100001 (status 200, 1 ms)
+   ok  Clean up (after): Deactivate 5550100002 (status 200, 1 ms)
 
 2/2 scenarios passed
 ```
@@ -84,6 +88,15 @@ The command exits with code `1` if any scenario fails, so it works as a CI gate.
 name: Suspend and restore
 variables:
   phone: "5550100050"
+
+# Runs before the first step and after the last one.
+cleanup:
+  - name: Deactivate ${phone}
+    method: POST
+    path: /api/v1/subscribers/deactivate
+    body: {phone_number: "${phone}"}
+    expect:
+      status: 200
 
 steps:
   - name: Create subscriber
@@ -112,6 +125,20 @@ steps:
 | `expect.contains` | List or string fields that must contain a value |
 | `save` | Store response fields as variables for later steps |
 | `stop_on_failure` | Stop the scenario at the first failed step (default `true`) |
+| `cleanup` | Steps that run first and last, to put test data into a known inactive state |
+
+### Clean data first and last
+
+A regression run is only trustworthy if it starts from a known state. An account left open by an earlier run, or by a run that failed halfway, makes the next run fail for reasons that have nothing to do with the system under test.
+
+So every scenario declares `cleanup` steps, and the runner executes them twice:
+
+1. **First**, before any test step, to deactivate whatever is open on the scenario's test numbers. If this fails, the test steps are skipped, because results against unknown data mean nothing.
+2. **Last**, after the test steps, to leave the data inactive for the next run. This always runs, even when a test step fails.
+
+Cleanup steps are ordinary steps, so they should call something that is safe to repeat. The mock API's `POST /api/v1/subscribers/deactivate` closes any open account on a phone number and returns 200 whether or not one existed.
+
+The test suite enforces this: every file under `scenarios/` must declare `cleanup`, and all scenarios must pass twice in a row against the same server with no reset in between.
 
 ## Pointing at a real API
 
