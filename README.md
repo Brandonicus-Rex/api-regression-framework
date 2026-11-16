@@ -8,6 +8,10 @@ It ships with a small mock subscriber-lifecycle API, so you can clone the repo a
 
 **Requires Python 3.10–3.13.** Some dependencies don't yet publish prebuilt packages for newer versions.
 
+## Demo
+
+![Terminal demo: both scenarios passing, with cleanup steps first and last](demo.gif)
+
 ## Why this exists
 
 Telecom and account-provisioning systems need the same business flows tested over and over: create an account, suspend it, restore it, change features, close it. Writing a new script for each flow leads to thousands of lines of copy-pasted requests. This framework turns each flow into a short YAML file and keeps the request logic in one place.
